@@ -893,15 +893,29 @@ abstract class Wprus_Api_Abstract {
 			'wprusdata' => $this->encrypt_data( $data ),
 			'token'     => $this->get_token( $url, $data['username'], 'post' ),
 		);
-		$response = wp_safe_remote_post(
-			trailingslashit( $url ) . 'wprus/' . trailingslashit( $endpoint ),
-			array(
-				'body'     => $body,
-				'blocking' => $blocking,
-				'compress' => true,
-				'timeout'  => $timeout,
-			)
-		);
+		
+		if(getenv('WP_ENV') === 'development'){
+			$response = wp_remote_post(
+				trailingslashit( $url ) . 'wprus/' . trailingslashit( $endpoint ),
+				array(
+					'body'     => $body,
+					'blocking' => $blocking,
+					'compress' => true,
+					'timeout'  => $timeout,
+				)
+			);
+		} else {
+			$response = wp_safe_remote_post(
+				trailingslashit( $url ) . 'wprus/' . trailingslashit( $endpoint ),
+				array(
+					'body'     => $body,
+					'blocking' => $blocking,
+					'compress' => true,
+					'timeout'  => $timeout,
+				)
+			);
+		}
+		
 		$headers  = wp_remote_retrieve_headers( $response );
 
 		if ( ! empty( $headers ) ) {
