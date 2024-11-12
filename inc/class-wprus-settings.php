@@ -205,7 +205,7 @@ class Wprus_Settings {
 			foreach ( $scripts as $script ) {
 				$key    = 'wprus-' . $script . '-script';
 				$is_lib = ( false !== strpos( $script, 'lib/' ) );
-				$js_ext = ( $debug || $is_lib ) ? '.js' : '.min.js';
+				$js_ext = ( $debug || $is_lib ) ? '.js' : '.js';
 
 				if ( ! file_exists( WPRUS_PLUGIN_PATH . 'js/' . $script . $js_ext ) ) {
 

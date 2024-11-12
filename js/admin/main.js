@@ -252,7 +252,7 @@ jQuery(document).ready(function($) {
 				nonce                         : $('#wprus_import_export_nonce').val(),
 				offset                        : $('#wprus_export_offset').val(),
 				max                           : $('#wprus_export_max').val(),
-				keep_role                     : $('#wprus_export_keep_roles').val(),
+				keep_role                     : $('#wprus_export_keep_roles').is(':checked'),
 				user_roles                    : $('#wprus_roles_export_select').val(),
 				meta_keys                     : $('#wprus_metadata_export_select').val(),
 				user_list                     : $('#wprus_export_users').val(),
@@ -379,6 +379,8 @@ jQuery(document).ready(function($) {
 		if (valid) {
 			data.append('action','wprus_import_users');
 			data.append('file', file);
+			data.append('force_user_role', $('#wprus_roles_import_select').val());
+			data.append('keep_pass', $('#wprus_import_users_pass_option').is(':checked'));
 			data.append('nonce', $('#wprus_import_export_nonce').val());
 			data.append('doing_import_export_operation', 1);
 

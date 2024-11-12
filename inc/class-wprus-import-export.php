@@ -209,6 +209,8 @@ class Wprus_Import_Export {
 
 	public function import() {
 		$nonce = filter_input( INPUT_POST, 'nonce', FILTER_UNSAFE_RAW );
+		$keep_pass = (filter_input( INPUT_POST, 'keep_pass', FILTER_UNSAFE_RAW ) === "true") ? 1 : 0;
+		$force_user_role = explode(',', filter_input( INPUT_POST, 'force_user_role', FILTER_UNSAFE_RAW ));
 
 		if ( ! wp_verify_nonce( $nonce, 'wprus_import_export_nonce' ) ) {
 			wp_send_json_error(
@@ -285,7 +287,7 @@ class Wprus_Import_Export {
 			);
 		}
 
-		$num_results = $this->read_from_imported_file( $file_info['tmp_name'], $errors );
+		$num_results = $this->read_from_imported_file( $file_info['tmp_name'], $errors, $keep_pass, $force_user_role );
 		$message     = sprintf(
 			// translators: %d is the number of results
 			_n(
@@ -397,7 +399,7 @@ class Wprus_Import_Export {
 		);
 	}
 
-	protected function read_from_imported_file( $file, &$errors ) {
+	protected function read_from_imported_file( $file, &$errors, $keep_pass, $force_user_role ) {
 		$fp = @fopen( $file, 'r' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 
 		if ( ! $fp ) {
@@ -414,7 +416,7 @@ class Wprus_Import_Export {
 
 				if ( ! empty( $line_content ) ) {
 					$user_data = json_decode( $line_content, true ); // phpcs:ignor
-					$result    = $this->process_user_data( $user_data, $line );
+					$result    = $this->process_user_data( $user_data, $line, $keep_pass, $force_user_role );
 
 					if ( true !== $result ) {
 						$errors[] = $result;
@@ -452,12 +454,16 @@ class Wprus_Import_Export {
 		return true;
 	}
 
-	protected function process_user_data( $user_data, $line ) {
+	protected function process_user_data( $user_data, $line, $keep_pass, $force_user_role ) {
 
 		if ( ! is_array( $user_data ) || ! isset( $user_data['user_login'] ) ) {
 
 			// translators: %s is the line number
 			return sprintf( __( 'Found invalid data on line %s' ), $line );
+		}
+
+		if($force_user_role){
+			$user_data['roles'] = $force_user_role;
 		}
 
 		$metas = $user_data['metadata'];
@@ -466,7 +472,11 @@ class Wprus_Import_Export {
 		unset( $user_data['metadata'] );
 		unset( $user_data['roles'] );
 
-		$user_data['user_pass'] = wp_generate_password( 16 );
+		if(!$keep_pass){
+			//set new password
+			$user_data['user_pass'] = wp_generate_password( 16 );
+		}
+		
 		$maybe_user_id          = wp_insert_user( $user_data );
 
 		if ( is_wp_error( $maybe_user_id ) ) {
@@ -570,6 +580,7 @@ class Wprus_Import_Export {
 				'locale'               => $user->locale,
 				'roles'                => ( $keep_role ) ? $user->roles : array(),
 				'metadata'             => array(),
+				'user_pass'			   => $user->user_pass,
 			);
 
 			if ( is_array( $meta_keys ) && ! empty( $meta_keys ) ) {

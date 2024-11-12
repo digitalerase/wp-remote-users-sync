@@ -7,6 +7,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 ?>
 <div class="wprus-container" data-postbox_class="wprus-users wprus-togglable">
 	<table class="form-table">
+		<tr>
+			<th>
+			</th>
+			<td>
+				<label for=""><?php esc_html_e( 'Force imported users to this role', 'wprus' ); ?></label>
+				<select id="wprus_roles_import_select" class="wprus-select" multiple>
+				<?php if ( ! empty( $roles ) ) : ?>
+					<?php foreach ( $roles as $user_role ) : ?>
+						<option value="<?php echo esc_attr( $user_role ); ?>"><?php echo esc_html( $user_role ); ?></option>
+					<?php endforeach; ?>
+				<?php endif; ?>
+				</select>
+				<div class="import-users-options">
+					<input type="checkbox" id="wprus_import_users_pass_option" value="0"><label><?php esc_html_e( 'Keep existing password', 'wprus' ); ?></label>
+				</div>
+			</td>
+		</tr>
 		<tr id="wprus_import_file_dropzone">
 			<th>
 				<label for="wprus_import_file"><?php esc_html_e( 'Users File', 'wprus' ); ?></label>
