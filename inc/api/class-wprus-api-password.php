@@ -14,7 +14,7 @@ class Wprus_Api_Password extends Wprus_Api_Abstract {
 		add_action( 'password_reset', array( $this, 'schedule_shutdown' ), PHP_INT_MAX - 100, 2 );
 		add_action( 'wprus_password', array( $this, 'handle_password_creation' ), 10, 1 );
 		add_action( 'wp_set_password', array( $this, 'handle_password_creation' ), PHP_INT_MAX - 100, 1 );
-		add_action( 'wp_update_user', array( $this, 'handle_password_update' ), PHP_INT_MAX - 100, 3 );
+		add_action( 'wp_update_user', array( $this, 'handle_password_update' ), PHP_INT_MAX - 200, 3 );
 	}
 
 	public function handle_password_creation( $password ) {
