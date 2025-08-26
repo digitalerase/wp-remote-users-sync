@@ -108,6 +108,19 @@ GITPATH="$DIR/"
 SVNPATH="/tmp/$PLUGINSLUG" # path to a temp SVN repo. No trailing slash required and don't add trunk.
 SVNURL="http://plugins.svn.wordpress.org/$PLUGINSLUG/" # Remote SVN repo on wordpress.org, with no trailing slash
 
+# Function to handle command errors
+handle_error() {
+    local cmd="$1"
+    local exit_code="$2"
+    echo "Error: $cmd command failed with exit code $exit_code"
+    cd "$GITPATH" || {
+        echo "Error: Unable to change directory to $GITPATH"
+        exit 1
+    }
+    git checkout "$CURRENTBRANCH"
+    exit 1
+}
+
 # Function to execute or echo commands based on deploy mode
 execute_or_echo() {
     local command="$1"
@@ -124,7 +137,19 @@ execute_or_echo() {
                 if $VERBOSE; then
                     echo "$command ${args[*]}"
                 fi
-                "$command" "${args[@]}" || { echo "Error: $command command failed"; exit 1; }
+                "$command" "${args[@]}"
+                local exit_code=$?
+                if [[ $exit_code -ne 0 ]]; then
+                    # Make exception for git commit when there's nothing to commit
+                    if [[ "$command" == "git" && "${args[0]}" == "commit" && $exit_code -eq 1 ]]; then
+                        # Check if the error is about "nothing to commit"
+                        if git status | grep -q "nothing to commit"; then
+                            echo "Notice: Nothing to commit, continuing with deployment"
+                            return 0
+                        fi
+                    fi
+                    handle_error "$command ${args[*]}" "$exit_code"
+                fi
             fi
             ;;
         svn)
@@ -135,7 +160,11 @@ execute_or_echo() {
                 if $VERBOSE; then
                     echo "$command ${args[*]}"
                 fi
-                "$command" "${args[@]}" || { echo "Error: $command command failed"; exit 1; }
+                "$command" "${args[@]}"
+                local exit_code=$?
+                if [[ $exit_code -ne 0 ]]; then
+                    handle_error "$command ${args[*]}"
+                fi
             fi
             ;;
         gh)
@@ -146,7 +175,11 @@ execute_or_echo() {
                 if $VERBOSE; then
                     echo "gh ${args[*]}"
                 fi
-                "$command" "${args[@]}" || { echo "Error: $command command failed"; exit 1; }
+                "$command" "${args[@]}"
+                local exit_code=$?
+                if [[ $exit_code -ne 0 ]]; then
+                    handle_error "$command ${args[*]}"
+                fi
             fi
             ;;
         *)
@@ -154,7 +187,11 @@ execute_or_echo() {
             if $VERBOSE; then
                 echo "$command ${args[*]}"
             fi
-            "$command" "${args[@]}" || { echo "Error: $command command failed"; exit 1; }
+            "$command" "${args[@]}"
+            local exit_code=$?
+            if [[ $exit_code -ne 0 ]]; then
+                handle_error "$command ${args[*]}"
+            fi
         ;;
     esac
 }
@@ -224,17 +261,13 @@ execute_or_echo git checkout "$GITBRANCH"
 # Commit changes
 execute_or_echo git commit -am "$COMMITMSG"
 
-# Tag new version in git
-execute_or_echo git tag -a "$NEWVERSION1" -m "Tagging version $NEWVERSION1"
-
 # Push changes to origin
 execute_or_echo git push origin "$GITBRANCH"
-execute_or_echo git push origin "$GITBRANCH" --tags
 
 # check if gh cli is installed
 if which gh > /dev/null; then
     # Create a GitHub release using the GitHub API
-    echo "Creating GitHub release for tag $NEWVERSION1..."
+    echo "Creating GitHub release for $NEWVERSION1..."
 
     # Define the GitHub repository owner and name
     GITHUB_OWNER=$(git config --get remote.origin.url | sed -E 's#(https://github.com|git@github.com:)([^/]+)/.*#\2#')
@@ -282,6 +315,8 @@ fi
 # Create local copy of SVN repo
 execute_or_echo svn co "$SVNURL" "$SVNPATH"
 
+echo "SVN repository checked out to $SVNPATH"
+
 #Init directories assets, tags, trunk if they do not exist
 if [ ! -d "$SVNPATH"/assets ]; then
     execute_or_echo mkdir "$SVNPATH"/assets
@@ -316,6 +351,8 @@ execute_or_echo svn propset svn:ignore "deploy.sh
 execute_or_echo cd "$SVNPATH"/trunk/
 execute_or_echo svn add readme.txt
 
+echo "Added readme.txt to SVN trunk."
+
 # Create new SVN tag
 execute_or_echo cd "$SVNPATH"
 
@@ -345,6 +382,8 @@ execute_or_echo bash -c "
     xargs -I {} svn add {}
 "
 
+echo "Added new files to SVN tag $NEWVERSION1."
+
 if ! $SKIP_ASSETS; then
     # Change to the assets folder
     execute_or_echo cd "$SVNPATH"/assets/
@@ -364,13 +403,64 @@ fi
 
 # Commit trunk, tag and assets changes in one step
 execute_or_echo cd "$SVNPATH"
+
+echo "Changed path to $SVNPATH - svn status is:"
+# show the svn status
+execute_or_echo svn status
+
+# Wait for user comfirmation before committing
+read -p "Are you sure you want to commit these changes? (y/n): " -n 1 -r
+echo
+
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "SVN Commit cancelled."
+
+    # Get back to the git directory
+    execute_or_echo cd "$GITPATH"
+
+    # check if gh cli is installed and remove GitHub release
+    if which gh > /dev/null; then
+        # Get GitHub repository information from git config
+        GITHUB_OWNER=$(git config --get remote.origin.url | sed -E 's#(https://github.com|git@github.com:)([^/]+)/.*#\2#')
+        GITHUB_REPO=$(git config --get remote.origin.url | sed -E 's#(https://github.com|git@github.com:)[^/]+/([^/]+).git#\2#')
+
+        # Delete the GitHub release
+        execute_or_echo gh release delete "v$NEWVERSION1" --repo "$GITHUB_OWNER/$GITHUB_REPO" --yes
+        # ! Note that the v$NEWVERSION1 git tag still remains in the repository
+        # also delete it from remote
+        execute_or_echo git push origin --delete "v$NEWVERSION1"
+    fi
+
+    # ASK if the user wants to delete the temporary SVN directory
+    read -p "Do you want to delete the temporary SVN directory $SVNPATH? (y/n): " -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # Clean up temporary directory
+        execute_or_echo rm -fr "${SVNPATH:?}/"
+        echo "Temporary SVN directory $SVNPATH was deleted."
+    else
+        echo "Temporary SVN directory $SVNPATH was NOT deleted."
+    fi
+
+    # Switch back to the original branch
+    execute_or_echo git checkout "$CURRENTBRANCH"
+
+    exit 0
+fi
+
 execute_or_echo svn commit --username="$SVNUSER" -m "$COMMITMSG"
 
 # Go back to current directory
 execute_or_echo cd "$GITPATH"
 
-# Clean up temporary directory
-execute_or_echo rm -fr "${SVNPATH:?}/"
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Clean up temporary directory
+    execute_or_echo rm -fr "${SVNPATH:?}/"
+    echo "Temporary SVN directory $SVNPATH was deleted."
+else
+    echo "Temporary SVN directory $SVNPATH was NOT deleted."
+fi
 
 # Switch back to the original branch
 execute_or_echo git checkout "$CURRENTBRANCH"
