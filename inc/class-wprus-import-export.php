@@ -526,7 +526,7 @@ class Wprus_Import_Export {
 			}
 		}
 
-		do_action( 'wprus_after_import_user', $maybe_user_id );
+		do_action( 'wprus_after_import_user', $maybe_user_id, $user_data );
 
 		return true;
 	}
